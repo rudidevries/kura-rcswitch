@@ -7,4 +7,5 @@
    </service>
    <reference bind="setCloudService" cardinality="1..1" interface="org.eclipse.kura.cloud.CloudService" name="CloudService" policy="static" unbind="unsetCloudService"/>
    <reference bind="setCommandService" cardinality="1..1" interface="org.eclipse.kura.command.CommandService" name="CommandService" policy="static" unbind="unsetCommandService"/>
+   <reference bind="setSolarEventService" cardinality="1..1" interface="nl.rudidevries.kura.solarevent.api.SolarEventService" name="SolarEventService" policy="static" unbind="unsetSolarEventService"/>
 </scr:component>

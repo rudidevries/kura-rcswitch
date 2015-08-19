@@ -1,6 +1,9 @@
 package nl.rudidevries.kura.rcswitch;
 
-import org.eclipse.kura.KuraException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.eclipse.kura.cloud.CloudClientListener;
 import org.eclipse.kura.command.CommandService;
 import org.eclipse.kura.message.KuraPayload;
@@ -15,7 +18,9 @@ import org.slf4j.LoggerFactory;
 class SwitchCloudClientListener implements CloudClientListener {
 	private static final Logger s_logger = LoggerFactory.getLogger(RcSwitchListener.class);
 	private CommandService m_commandService;
-	private String m_scriptPath;
+	
+	private Map<SwitchId, SwitchCommand> sunRiseCommands = new HashMap<>();
+	private Map<SwitchId, SwitchCommand> sunSetCommands = new HashMap<>();
 	
 	/**
 	 * Constructor
@@ -23,32 +28,14 @@ class SwitchCloudClientListener implements CloudClientListener {
 	 * @param commandService Command service to be used to execute commands.
 	 * @param scriptPath Script that is to be executed.
 	 */
-	SwitchCloudClientListener(CommandService commandService, String scriptPath) {
+	SwitchCloudClientListener(CommandService commandService) {
 		m_commandService = commandService;
-		m_scriptPath = scriptPath;
-	}
-	
-	/**
-	 * Setter
-	 * @param scriptPath
-	 */
-	public void setScriptPath(String scriptPath) {
-		m_scriptPath = scriptPath;
-	}
-	
-	/**
-	 * Getter
-	 * @return script path
-	 */
-	public String getScriptPath() {
-		return m_scriptPath;
 	}
 	
 	@Override
 	public void onControlMessageArrived(String deviceId, String appTopic, KuraPayload msg, int qos,
 			boolean retain) {
-		// TODO Auto-generated method stub
-		
+		// TODO Auto-generated method stub	
 	}
 
 	@Override
@@ -56,25 +43,101 @@ class SwitchCloudClientListener implements CloudClientListener {
 			boolean retain) {
 		// Get parameter values from received message details.
 		String switchValue = new String(msg.getBody());
-		String[] switchParams = appTopic.split("/");		
-		s_logger.info("Message arrived: {}, for switch: {}", switchValue, switchParams);
+		String[] switchParams = appTopic.split("/");
 		
-		try {
-			// Create the command to be executed.
-			String command = String.format("%s %s %s %s", 
-					m_scriptPath, 
-					switchParams[0], 
-					switchParams[1], 
-					switchValue
-			);
-			
-			// Execute the command.
-			s_logger.info("Executing: {}", command);
-			m_commandService.execute(command);
-		} catch (KuraException e) {
-			e.printStackTrace();
-			s_logger.error("Command failed.");
+		// switch/sun/rise || switch/sun/set
+		if (switchParams[0].equals("sun")) {
+			handleSunCommands(switchParams[1]);
 		}
+		// switch/A/1/#
+		else {
+			SwitchId switchId = new SwitchId(switchParams[0], switchParams[1]);
+			s_logger.info("Message arrived: {}, for switch: {}", switchValue, switchParams);
+			
+			// invalid, just ignore.
+			if (switchParams.length != 2 && switchParams.length != 4) {
+				return;
+			}
+			
+			// An on or off command.
+			if (switchParams.length == 2) {
+				handleSimpleSwitch(switchId, switchValue);
+			}
+			// Else it must be a sun command.
+			else if(switchParams[2].equals("sun")) {
+				handleSunSwitchSetting(switchId, switchParams[3], switchValue);
+			}
+			else {
+				s_logger.info("Message is not handled... {}", switchParams[2]);
+			}
+		}
+	}
+	
+	/**
+	 * Execute sunrise or sunset commands.
+	 * @param event rise or set
+	 */
+	private void handleSunCommands(String event) {
+		// determine which commands to execute.
+		Collection<SwitchCommand> commands;
+		if (event.equals("rise")) {
+			s_logger.info("Handling sunrise");
+			commands = sunRiseCommands.values();
+		}
+		else {
+			s_logger.info("Handling sunset");
+			commands = sunSetCommands.values();
+		}
+		
+		// execute commands.
+		for(SwitchCommand c : commands) {
+			c.execute();
+		}	
+	}
+	
+	/**
+	 * Handle a switch command directly.
+	 * 
+	 * @param switchId Switch identifier.
+	 * @param switchValue on or off
+	 */
+	private void handleSimpleSwitch(SwitchId switchId, String switchValue) {
+		SwitchCommand command = new SwitchValueCommand(
+				switchId,
+				switchValue
+				);
+		command.setCommandService(m_commandService);
+		command.execute();
+	}
+	
+	/**
+	 * Handle the sun switch setting.
+	 * 
+	 * @param switchId Switch identifier.
+	 * @param switchParams 
+	 * @param switchValue
+	 */
+	private void handleSunSwitchSetting(SwitchId switchId, String event, String switchValue) {
+		// Determine the command set to edit.
+		Map<SwitchId, SwitchCommand> listeners = 
+				event.equals("rise") ? sunRiseCommands : sunSetCommands;
+	
+		// Determine what command should be set/unset
+		SwitchCommand command = null;
+		switch (switchValue) {
+			case "on":
+			case "off":
+				command = new SwitchValueCommand(switchId, switchValue);
+				command.setCommandService(m_commandService);
+				break;
+			case "disabled":
+				listeners.remove(switchId);
+				// disabled commands don't need to be executed, so return.
+				return;
+		}
+		
+		s_logger.info("Added or changed listeners command for {}", switchId);
+		listeners.put(switchId, command);
 	}
 
 	@Override

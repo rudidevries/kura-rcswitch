@@ -12,6 +12,8 @@ import org.osgi.service.component.ComponentException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import nl.rudidevries.kura.solarevent.api.SolarEventService;
+
 /**
  * Subscribe to a MQTT endpoint and listen for commands. These commands will 
  * be interpreted and execute a command line script through the command service.
@@ -36,8 +38,10 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	private CloudService m_cloudService;
 	private CloudClient m_cloudClient;
 	private CommandService m_commandService;
+	private SolarEventService m_solarEventService;
 	
 	private SwitchCloudClientListener m_cloudClientListener;
+	private SwitchSolarEventListener m_switchSolarEventListener;
 	
 	/**
 	 * DI
@@ -72,6 +76,22 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	}
 	
 	/**
+	 * DI
+	 * @param solarEventService
+	 */
+	public void setSolarEventService(SolarEventService solarEventService) {
+		m_solarEventService = solarEventService;
+	}
+	
+	/**
+	 * DI
+	 * @param solarEventService
+	 */
+	public void unsetSolarEventService(SolarEventService solarEventService) {
+		m_solarEventService = null;
+	}
+	
+	/**
 	 * Activate the component.
 	 * 
 	 * @param componentContext
@@ -80,11 +100,14 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	protected void activate(ComponentContext componentContext, Map<String,Object> properties) {
 		// Set the component configuration properties.
 		this.m_properties = properties;
+		SwitchValueCommand.setScriptPath((String) m_properties.get(PROPERTIES_SCRIPT_PATH));
 		
 		// Acquire a Cloud Application Client for this Application
 		s_logger.info("Getting CloudClient for {}...", APP_ID);
 		try {
 			m_cloudClient = m_cloudService.newCloudClient(APP_ID);
+			m_switchSolarEventListener = new SwitchSolarEventListener(m_cloudClient);
+			m_solarEventService.addEventListener(m_switchSolarEventListener);
 		}
 		catch (Exception e) {
 			s_logger.info("Failed retrieving new CloudClient for {}...", APP_ID);
@@ -103,6 +126,7 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	 */
 	protected void deactivate(ComponentContext componentContext) {
 		s_logger.info("Deactivating {}...", APP_ID);
+		m_solarEventService.removeEventListener(m_switchSolarEventListener);
 		m_cloudClient.release();
 	}
 	
@@ -113,8 +137,8 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	public void updated(Map<String, Object> properties) {
 		this.m_properties = properties;
 		
-		// Change script path of listener.
-		m_cloudClientListener.setScriptPath((String) m_properties.get(PROPERTIES_SCRIPT_PATH));
+		// Change script path for command.
+		SwitchValueCommand.setScriptPath((String) m_properties.get(PROPERTIES_SCRIPT_PATH));
 	}
 	
 	/**
@@ -123,11 +147,14 @@ public class RcSwitchListener implements ConfigurableComponent  {
 	 */
 	private void intializeSubscription() {
 		try {
-			m_cloudClient.subscribe("#", 1);
+			m_cloudClient.subscribe("+/+", 1);
+			m_cloudClient.subscribe("+/+/sun/rise", 1);
+			m_cloudClient.subscribe("+/+/sun/set", 1);
+			m_cloudClient.subscribe("sun/set", 1);
+			m_cloudClient.subscribe("sun/rise", 1);
 			
 			m_cloudClientListener = new SwitchCloudClientListener(
-					m_commandService,
-					(String) m_properties.get(PROPERTIES_SCRIPT_PATH)
+					m_commandService
 			);
 			m_cloudClient.addCloudClientListener(m_cloudClientListener);
 		} catch (KuraException e) {

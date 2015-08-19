@@ -5,10 +5,12 @@ Bundle-SymbolicName: nl.rudidevries.kura.rcswitch
 Bundle-Version: 1.0.0.qualifier
 Bundle-RequiredExecutionEnvironment: JavaSE-1.7
 Service-Component: OSGI-INF/component.xml
-Import-Package: org.eclipse.kura;version="1.0.0",
+Import-Package: nl.rudidevries.kura.solarevent.api;version="1.0.0",
+ org.eclipse.kura;version="1.0.0",
  org.eclipse.kura.cloud;version="1.0.0",
  org.eclipse.kura.configuration;version="1.0.0",
  org.eclipse.kura.message;version="1.0.0",
  org.osgi.service.component;version="1.2.0",
  org.slf4j;version="1.6.4"
-Require-Bundle: org.eclipse.kura.api;bundle-version="1.0.4"
+Require-Bundle: org.eclipse.kura.api;bundle-version="1.0.4",
+ nl.rudidevries.kura.solarevent;bundle-version="1.0.0"
